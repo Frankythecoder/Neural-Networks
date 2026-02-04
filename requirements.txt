@@ -1,4 +1,20 @@
-numpy>=1.21.0
-torch>=2.0.0; platform_system != 'Windows' or platform_machine != 'x86'
-# NOTE: On Windows x86, install CPU torch manually if needed:
-# python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+Django
+python-decouple
+python-dotenv
+openai
+boto3
+django-storages
+pygame
+opencv-python
+pytest
+pylint
+sqlfluff
+langchain
+reportlab
+python-docx
+openpyxl
+python-pptx
+pydantic
+mcp>=1.2.0
+requests
+playwright
