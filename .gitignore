@@ -1,2 +1,43 @@
-/.zencoder
-/.zenflow
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+
+# ML artifacts
+data/
+mlruns/
+outputs/
+checkpoints/
+*.pt
+*.pth
+*.onnx
+
+# DVC
+/data
+*.dvc
+
+# Environment
+.env
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+.pytest_cache/
+htmlcov/
+.coverage
+
+# Misc
+.zencoder/
+.zenflow/

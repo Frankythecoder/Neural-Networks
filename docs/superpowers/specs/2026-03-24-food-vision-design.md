@@ -8,6 +8,18 @@ Transform the Neural-Networks repository from a Hangman game into **food-vision*
 **Dataset:** Food-101 — 101 food categories, 1,000 images each, ~5 GB total.
 **Why food recognition:** Publicly benchmarked dataset with published baselines, visually intuitive for demos, real-world applicable (nutrition tracking, restaurant apps), and challenging enough (visually similar dishes, varied lighting) to justify serious modeling.
 
+**Repository:** The existing `Neural-Networks` GitHub repo will be renamed to `food-vision`. All Hangman files will be removed. Git history is preserved.
+
+---
+
+## Prerequisites
+
+- Python >= 3.11
+- NVIDIA GPU with CUDA 12.1+ toolkit
+- Docker and Docker Compose
+- DVC (`pip install dvc`)
+- Make
+
 ---
 
 ## Project Structure
@@ -61,7 +73,7 @@ food-vision/
 │   └── test_api.py               # FastAPI endpoint integration tests
 ├── docker/
 │   ├── Dockerfile.train          # Full training environment with CUDA
-│   └── Dockerfile.serve          # Minimal inference image (~500MB)
+│   └── Dockerfile.serve          # Inference image (CPU ONNX ~500MB, GPU ONNX ~1.5GB)
 ├── .github/
 │   └── workflows/
 │       ├── ci.yml                # PR: lint + type check + unit tests
@@ -86,8 +98,8 @@ food-vision/
 - **Total:** ~101,000 images, ~5 GB
 
 ### Splits
-- **Train:** 60% of original train set (45,450 images)
-- **Validation:** 20% of original train set (15,150 images)
+- **Train:** 75% of original train set (56,812 images)
+- **Validation:** 25% of original train set (18,938 images)
 - **Test:** Original test set (25,250 images) — untouched, used only for final evaluation
 
 ### Data Versioning (DVC)
@@ -121,8 +133,8 @@ food-vision/
 
 **Architecture:**
 - Backbone: EfficientNet-B2 pretrained on ImageNet (torchvision)
-- Custom classification head: AdaptiveAvgPool -> Dropout(0.3) -> Linear(1408, 512) -> ReLU -> Dropout(0.2) -> Linear(512, 101)
-- Total params: ~9.1M (backbone) + ~0.77M (head) = ~9.9M
+- Custom MLP head: AdaptiveAvgPool -> Dropout(0.3) -> Linear(1408, 512) -> ReLU -> Dropout(0.2) -> Linear(512, 101)
+- Total params: ~7.8M (backbone) + ~0.77M (head) = ~8.6M
 
 **Two-phase training:**
 
@@ -148,7 +160,9 @@ food-vision/
 
 ### Optimizer & Scheduler
 - **Optimizer:** AdamW (weight_decay=1e-4)
-- **Scheduler:** CosineAnnealingWarmRestarts with 3-epoch linear warmup
+- **Scheduler:** Composed via `SequentialLR`:
+  1. **Warmup phase (3 epochs):** `LinearLR` ramping from 0.01x to 1.0x base LR
+  2. **Cosine decay phase (remaining epochs):** `CosineAnnealingLR` decaying to 1e-6
 - **Gradient clipping:** max_norm=1.0
 
 ### Regularization
@@ -158,7 +172,7 @@ food-vision/
 - Mixup (alpha=0.2) + CutMix (alpha=1.0)
 
 ### Mixed Precision
-- `torch.cuda.amp.GradScaler` + `autocast` for FP16 training
+- `torch.amp.GradScaler('cuda')` + `torch.amp.autocast('cuda')` for FP16 training (PyTorch 2.0+ API)
 - ~2x training speedup, ~40% memory reduction
 
 ### Callbacks
@@ -179,12 +193,14 @@ food-vision/
   - GPU utilization stats
 
 ### Hyperparameter Tuning (Optuna)
+- Optuna tunes **Phase 2 only** (Phase 1 uses fixed defaults as a warm-start)
 - Search space:
-  - Learning rate: [1e-5, 1e-3] (log uniform)
-  - Weight decay: [1e-5, 1e-2] (log uniform)
-  - Dropout: [0.1, 0.5] (uniform)
-  - Label smoothing: [0.0, 0.2] (uniform)
-  - Unfreeze depth: [1, 2, 3, 4] blocks
+  - `phase2.backbone_lr`: [1e-5, 1e-3] (log uniform) — maps to `training.phase2.backbone_lr`
+  - `phase2.head_lr`: [1e-4, 1e-2] (log uniform) — maps to `training.phase2.head_lr`
+  - `weight_decay`: [1e-5, 1e-2] (log uniform) — maps to `training.weight_decay`
+  - `dropout`: [0.1, 0.5] (uniform) — maps to `model.dropout` (both layers use same value)
+  - `label_smoothing`: [0.0, 0.2] (uniform) — maps to `training.label_smoothing`
+  - `unfreeze_blocks`: [1, 2, 3, 4] (categorical) — maps to `training.phase2.unfreeze_blocks`
 - 20-30 trials with TPE sampler
 - Pruning underperforming trials early (MedianPruner)
 - All trials logged to MLflow
@@ -197,7 +213,7 @@ Run and report these 4 configurations to demonstrate incremental understanding:
 
 | Ablation | Description | Expected Impact |
 |----------|-------------|-----------------|
-| A: Baseline | Frozen EfficientNet-B2 + linear head, no augmentation beyond basic | ~75-78% top-1 |
+| A: Baseline | Frozen EfficientNet-B2 + MLP head, no augmentation beyond basic | ~70-75% top-1 |
 | B: + Fine-tuning | Unfreeze top 3 blocks, discriminative LR | +5-8% |
 | C: + Advanced augmentation | Add RandAugment, Mixup, CutMix | +2-3% |
 | D: + Label smoothing + tuned hyperparams | Full pipeline with Optuna-tuned params | +1-2% |
