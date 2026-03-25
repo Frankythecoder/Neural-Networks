@@ -7,16 +7,13 @@ build/
 *.egg
 
 # ML artifacts
-data/
+/data/
 mlruns/
 outputs/
 checkpoints/
 *.pt
 *.pth
 *.onnx
-
-# DVC
-/data
 *.dvc
 
 # Environment
