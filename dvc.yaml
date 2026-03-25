@@ -1,0 +1,28 @@
+stages:
+  download:
+    cmd: python -m src.data.download --config configs/default.yaml
+    deps:
+      - src/data/download.py
+      - configs/default.yaml
+    outs:
+      - data/food-101:
+          persist: true
+
+  train:
+    cmd: python -m src.training.trainer --config configs/default.yaml
+    deps:
+      - src/training/trainer.py
+      - src/models/efficientnet.py
+      - configs/default.yaml
+      - data/food-101
+    outs:
+      - checkpoints/best.pt
+    metrics:
+      - mlruns:
+          persist: true
+
+  evaluate:
+    cmd: python -m src.evaluation.metrics --config configs/default.yaml
+    deps:
+      - src/evaluation/metrics.py
+      - checkpoints/best.pt
